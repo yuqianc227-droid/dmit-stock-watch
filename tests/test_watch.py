@@ -38,6 +38,15 @@ class ParseStock(unittest.TestCase):
     def test_missing(self):
         self.assertEqual(w.parse_stock("<h1>DMIT</h1>"), "unknown")
 
+    def test_split_html_product_title(self):
+        page = (
+            '<div><span>缺货</span><h3><span>DMIT</span> · '
+            '<span>LAX.AS3.Pro.TINY</span></h3>'
+            '<p>CN2 GIA Premium美国 • 洛杉矶 · CN2 GIA，Premium'
+            '$10.90 USD / 月</p><p>上次补货 61 天前✓ 14 分钟前确认</p></div>'
+        )
+        self.assertEqual(w.parse_stock(page), "out")
+
     def test_sct_url(self):
         self.assertEqual(
             w.sender_url("SCTabc"), "https://sctapi.ftqq.com/SCTabc.send"
