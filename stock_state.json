@@ -1,4 +1,5 @@
 {
-  "failures": 4,
-  "heartbeat_at": "2026-11-24T15:20:09+00:00"
+  "failures": 0,
+  "heartbeat_at": "2026-11-24T15:20:09+00:00",
+  "status": "out"
 }
