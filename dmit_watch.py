@@ -95,8 +95,10 @@ def get_stock() -> str:
         )
         r.raise_for_status()
         return parse_stock(r.text)
-    except requests.RequestException:
-        # Avoid including third-party page content or query secrets in logs.
+    except requests.RequestException as exc:
+        # No credentials in this request; log only exception class/status, not URL/body.
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        print(f"库存请求失败：{type(exc).__name__}" + (f" HTTP {status}" if status else ""))
         raise StockCheckError("库存页面请求失败") from None
 
 
