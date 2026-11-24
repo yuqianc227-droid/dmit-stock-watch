@@ -33,39 +33,56 @@ def now_utc() -> datetime:
 
 
 def parse_stock(html: str) -> str:
-    """Return 'in', 'out', or 'unknown'; never infer 'in' from absence of 'out'."""
+    """Return 'in', 'out', or 'unknown'; fail closed on malformed/stale pages.
+
+    Website headings can be assembled from multiple HTML spans. Reading every
+    span as a separate line cannot reliably match the package name.
+    """
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
-    lines = [re.sub(r"\s+", " ", t).strip() for t in soup.get_text("\n", strip=True).splitlines()]
-    lines = [t for t in lines if t]
-    exact_name = re.compile(r"^DMIT\s*[·•]\s*LAX\.AS3\.Pro\.TINY$", re.I)
-    hits = [i for i, line in enumerate(lines) if exact_name.fullmatch(line)]
-    if len(hits) != 1 or hits[0] == 0:
+    text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True))
+
+    product_pattern = re.compile(
+        r"DMIT\s*[·•]\s*LAX\s*\.\s*AS3\s*\.\s*Pro\s*\.\s*TINY\b", re.I
+    )
+    matches = list(product_pattern.finditer(text))
+    if len(matches) != 1:
+        print(f"库存解析：目标套餐匹配数量 {len(matches)}，安全返回 unknown")
         return "unknown"
 
-    i = hits[0]
-    label = lines[i - 1].casefold()
-    if label in {"现货", "有货", "在售", "in stock"}:
-        status = "in"
-    elif label in {"缺货", "无货", "售罄", "out of stock"}:
-        status = "out"
-    else:
+    match = matches[0]
+    # Stock badge must be immediately before the exact product heading.
+    prefix = text[max(0, match.start() - 90):match.start()]
+    badge = re.search(
+        r"(?:^|\s)(现货|有货|在售|缺货|无货|售罄|in stock|out of stock)\s*$",
+        prefix, re.I,
+    )
+    if not badge:
+        print("库存解析：未找到紧邻目标套餐的库存标签")
+        return "unknown"
+    label = badge.group(1).casefold()
+    status = "in" if label in {"现货", "有货", "在售", "in stock"} else "out"
+
+    # Stop at the next card, avoiding price/confirmation from another plan.
+    suffix = text[match.end():]
+    next_product = re.search(r"DMIT\s*[·•]\s*", suffix, re.I)
+    detail = suffix[:next_product.start()] if next_product else suffix
+    if not re.search(r"\$\s*10\.90\b", detail) or not re.search(
+        r"\bPremium\b", detail, re.I
+    ):
+        print("库存解析：目标套餐价格或线路信息不符")
         return "unknown"
 
-    # Limit context to this product, not the next plan. Refuse layout/price mismatches.
-    end = next((j for j in range(i + 1, len(lines))
-                if re.match(r"^DMIT\s*[·•]\s*", lines[j], re.I)), len(lines))
-    detail = " ".join(lines[i + 1:min(i + 12, end)])
-    if PRICE not in detail or "Premium" not in detail:
-        return "unknown"
-
-    # The snapshot may become stale even if the HTML is reachable.
-    fresh = re.search(r"(?:✓|✔)\s*(\d+)\s*分钟\s*前\s*确认", detail)
-    if fresh:
-        if int(fresh.group(1)) > 60:
+    freshness = re.search(
+        r"(?:✓|✔)\s*(\d+)\s*分钟\s*前\s*确认", detail
+    )
+    if freshness:
+        if int(freshness.group(1)) > 60:
+            print("库存解析：确认时间超过 60 分钟")
             return "unknown"
     elif not re.search(r"(?:✓|✔)\s*(?:刚刚|刚才)\s*确认", detail):
+        print("库存解析：找不到新鲜的确认时间")
         return "unknown"
     return status
 
