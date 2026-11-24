@@ -32,12 +32,58 @@ def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def parse_structured_stock(html: str) -> str:
+    """Parse structured Product offers from public JSON-LD, fail closed."""
+    soup = BeautifulSoup(html, "html.parser")
+    matches = []
+    for script in soup.find_all("script", type="application/ld+json"):
+        if not script.string:
+            continue
+        try:
+            payload = json.loads(script.string)
+        except json.JSONDecodeError:
+            continue
+
+        def visit(node):
+            if isinstance(node, list):
+                for item in node:
+                    visit(item)
+            elif isinstance(node, dict):
+                name = str(node.get("name", ""))
+                if (node.get("@type") == "Product"
+                    and re.fullmatch(r"DMIT\s+LAX\.AS3\.Pro\.TINY", name, re.I)):
+                    offer = node.get("offers", {})
+                    if isinstance(offer, dict):
+                        availability = str(offer.get("availability", ""))
+                        price = str(offer.get("price", ""))
+                        url = str(offer.get("url", ""))
+                        if price in {"10.90", "10.9"} and re.search(
+                            r"/(?:dmit/)?253/?(?:\?.*)?$", url
+                        ):
+                            if availability.endswith("/InStock"):
+                                matches.append("in")
+                            elif availability.endswith("/OutOfStock"):
+                                matches.append("out")
+                for value in node.values():
+                    if isinstance(value, (dict, list)):
+                        visit(value)
+        visit(payload)
+
+    # Ambiguous data or no exact match is not a confirmed stock signal.
+    if len(matches) == 1:
+        return matches[0]
+    return "unknown"
+
+
 def parse_stock(html: str) -> str:
     """Return 'in', 'out', or 'unknown'; fail closed on malformed/stale pages.
 
     Website headings can be assembled from multiple HTML spans. Reading every
     span as a separate line cannot reliably match the package name.
     """
+    structured = parse_structured_stock(html)
+    if structured != "unknown":
+        return structured
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
