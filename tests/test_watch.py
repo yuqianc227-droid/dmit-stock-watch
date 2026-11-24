@@ -47,6 +47,35 @@ class ParseStock(unittest.TestCase):
         )
         self.assertEqual(w.parse_stock(page), "out")
 
+    def test_json_ld_out_of_stock(self):
+        import json
+        item = {"@context": "https://schema.org", "@type": "ItemList",
+                "itemListElement": [{"@type": "ListItem", "item": {
+                    "@type": "Product", "name": "DMIT LAX.AS3.Pro.TINY",
+                    "offers": {"availability": "https://schema.org/OutOfStock",
+                               "price": "10.90",
+                               "url": "https://vpsrestock.com/go/dmit/253"}}}]}
+        page = '<script type="application/ld+json">' + json.dumps(item) + '</script>'
+        self.assertEqual(w.parse_stock(page), "out")
+
+    def test_json_ld_in_stock(self):
+        import json
+        product = {"@type": "Product", "name": "DMIT LAX.AS3.Pro.TINY",
+                   "offers": {"availability": "https://schema.org/InStock",
+                              "price": "10.90",
+                              "url": "https://vpsrestock.com/go/dmit/253"}}
+        page = '<script type="application/ld+json">' + json.dumps(product) + '</script>'
+        self.assertEqual(w.parse_stock(page), "in")
+
+    def test_json_ld_wrong_pid(self):
+        import json
+        product = {"@type": "Product", "name": "DMIT LAX.AS3.Pro.TINY",
+                   "offers": {"availability": "https://schema.org/InStock",
+                              "price": "10.90",
+                              "url": "https://vpsrestock.com/go/dmit/259"}}
+        page = '<script type="application/ld+json">' + json.dumps(product) + '</script>'
+        self.assertEqual(w.parse_stock(page), "unknown")
+
     def test_sct_url(self):
         self.assertEqual(
             w.sender_url("SCTabc"), "https://sctapi.ftqq.com/SCTabc.send"
