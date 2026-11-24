@@ -24,5 +24,15 @@ for name, url in SOURCES.items():
         }
         print(name, "HTTP", response.status_code, "html_bytes", len(response.content),
               "text_chars", len(text), "indicators", indicators)
+
+        if name == "vpsrestock":
+            import html as html_lib
+            raw = response.text
+            matches = list(re.finditer(r"LAX(?:\\\\u002e|\\\\u002E|\\.|\\\\\\/|[.])AS3", raw, re.I))
+            print("vpsrestock raw match count:", len(matches))
+            for idx, match in enumerate(matches[:5]):
+                context = raw[max(0, match.start() - 350):match.start() + 650]
+                context = re.sub(r"[\\r\\n]+", " ", context)
+                print(f"vpsrestock context {idx}:", context[:1000])
     except requests.RequestException as exc:
         print(name, "FAILED", type(exc).__name__)
